@@ -1,80 +1,46 @@
 #!/usr/bin/env python3
+"""Session authentication module for the API.
 """
-Module for authentication
-"""
-
-
-from typing import List, TypeVar
+from uuid import uuid4
 from flask import request
-import os
+
+from .auth import Auth
+from models.user import User
 
 
-class Auth:
-    """_summary_
+class SessionAuth(Auth):
+    """Session authentication class.
     """
+    user_id_by_session_id = {}
 
-    def require_auth(self, path: str, excluded_paths: List[str]) -> bool:
-        """_summary_
-
-        Args:
-            path (str): _description_
-            excluded_paths (List[str]): _description_
-
-        Returns:
-                        bool: _description_
+    def create_session(self, user_id: str = None) -> str:
+        """Creates a session id for the user.
         """
-        if path is None:
-            return True
+        if type(user_id) is str:
+            session_id = str(uuid4())
+            self.user_id_by_session_id[session_id] = user_id
+            return session_id
 
-        if excluded_paths is None or excluded_paths == []:
-            return True
+    def user_id_for_session_id(self, session_id: str = None) -> str:
+        """Retrieves the user id of the user associated with
+        a given session id.
+        """
+        if type(session_id) is str:
+            return self.user_id_by_session_id.get(session_id)
 
-        if path in excluded_paths:
+    def current_user(self, request=None) -> User:
+        """Retrieves the user associated with the request.
+        """
+        user_id = self.user_id_for_session_id(self.session_cookie(request))
+        return User.get(user_id)
+
+    def destroy_session(self, request=None):
+        """Destroys an authenticated session.
+        """
+        session_id = self.session_cookie(request)
+        user_id = self.user_id_for_session_id(session_id)
+        if (request is None or session_id is None) or user_id is None:
             return False
-
-        for excluded_path in excluded_paths:
-            if excluded_path.startswith(path):
-                return False
-            elif path.startswith(excluded_path):
-                return False
-            elif excluded_path[-1] == "*":
-                if path.startswith(excluded_path[:-1]):
-                    return False
-
+        if session_id in self.user_id_by_session_id:
+            del self.user_id_by_session_id[session_id]
         return True
-
-    def authorization_header(self, request=None) -> str:
-        """_summary_
-
-        Args:
-            request (_type_, optional): _description_. Defaults to None.
-
-        Returns:
-                        str: _description_
-        """
-        if request is None:
-            return None
-        # get header from the request
-        header = request.headers.get('Authorization')
-
-        if header is None:
-            return None
-
-        return header
-
-    def current_user(self, request=None) -> TypeVar('User'):
-        """_summary_
-        """
-
-        return None
-
-    def session_cookie(self, request=None):
-        """_summary_
-
-        Args:
-            request (_type_, optional): _description_. Defaults to None.
-        """
-        if request is None:
-            return None
-        session_name = os.getenv('SESSION_NAME')
-        return request.cookies.get(session_name)
